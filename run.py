@@ -4,6 +4,8 @@ import shutil
 import time
 import requests
 import getpass  # Ocultar entrada da senha
+import tkinter as tk
+from tkinter import filedialog
 
 # URLs e nomes dos arquivos
 BASE_URL = "https://github.com/Detanup01/gbe_fork/releases/latest/download/"
@@ -208,6 +210,25 @@ def main():
 
     # Remove a pasta 'output'
     delete_file_or_directory("output")
+
+    # Solicita ao usuário para selecionar um arquivo
+    root = tk.Tk()
+    root.withdraw()  # Oculta a janela principal
+
+    file_path = filedialog.askopenfilename(
+        title="Selecione o ficheiro steam_api.dll ou steam_api64.dll",
+        filetypes=[("DLL files", "*.dll")],
+        initialdir="."
+    )
+
+    if file_path and (file_path.endswith("steam_api.dll") or file_path.endswith("steam_api64.dll")):
+        destination_path = shutil.copy(file_path, "Emu")
+        base, ext = os.path.splitext(destination_path)
+        new_file_path = base + "_o" + ext
+        os.rename(destination_path, new_file_path)
+        print(f"Ficheiro {file_path} copiado para a pasta Emu como {new_file_path}.")
+    else:
+        print("Nenhum ficheiro válido foi selecionado.")
 
     input("Pressione Enter para sair...")
 
