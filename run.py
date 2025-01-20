@@ -3,11 +3,14 @@ import os
 import shutil
 import time
 import requests
-import getpass  # Ocultar entrada da senha
+import getpass
+import filecmp  # Comparação de arquivos
 import tkinter as tk
 from tkinter import filedialog
 
-# URLs e nomes dos arquivos
+# -----------------------------------
+# Configurações Globais
+# -----------------------------------
 BASE_URL = "https://github.com/Detanup01/gbe_fork/releases/latest/download/"
 SEVEN_ZIP_URL = "https://github.com/ip7z/7zip/releases/latest/download/7zr.exe"
 
@@ -17,22 +20,26 @@ DIRECTORIES_TO_REMOVE = ["parse_controller_vdf", "parse_achievements_schema"]
 DIRECTORIES_TO_CHECK = ["generate_emu_config", "release"]
 EMU_FOLDER = "Emu"
 ASSETS_FILE = "assets.7z"
-LOGIN_FILE = os.path.join("generate_emu_config", "my_login.txt")
+
+# Caminhos de login
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+LOGIN_FILE = os.path.join(SCRIPT_DIR, "my_login.txt")
+GEN_EMU_LOGIN_FILE = os.path.join("generate_emu_config", "my_login.txt")
 
 # -----------------------------------
 # Funções Auxiliares de Arquivo e Diretório
 # -----------------------------------
 
 def download_file(url, file_name):
-    """Baixa um arquivo de uma URL especificada."""
+    """Baixa um arquivo de uma URL."""
     response = requests.get(url, stream=True)
     if response.status_code == 200:
         with open(file_name, "wb") as file:
             for chunk in response.iter_content(1024):
                 file.write(chunk)
-        print(f"Download concluído: {file_name}")
+        print(f"[✔] Download concluído: {file_name}")
     else:
-        print(f"Falha ao baixar {file_name}: Código {response.status_code}")
+        print(f"[✘] Falha ao baixar {file_name} (Código {response.status_code})")
 
 def extract_file(file_name):
     """Extrai um arquivo compactado usando 7zr.exe."""
@@ -42,193 +49,138 @@ def extract_file(file_name):
 
     if os.path.exists(file_name):
         subprocess.run([SEVEN_ZIP_EXE, "x", file_name, "-o."], check=True)
-        print(f"Extração concluída: {file_name}")
-        if file_name != ASSETS_FILE:  # Mantém assets.7z, remove outros
+        print(f"[✔] Extração concluída: {file_name}")
+        if file_name != ASSETS_FILE:
             os.remove(file_name)
-            print(f"Arquivo removido após extração: {file_name}")
     else:
-        print(f"Erro: '{file_name}' não encontrado!")
+        print(f"[✘] Erro: '{file_name}' não encontrado!")
 
 def delete_file_or_directory(path):
     """Remove arquivos ou diretórios."""
     if os.path.exists(path):
-        if os.path.isdir(path):
-            shutil.rmtree(path, ignore_errors=True)
-        else:
-            os.remove(path)
-        print(f"Removido: {path}")
+        shutil.rmtree(path) if os.path.isdir(path) else os.remove(path)
+        print(f"[✔] Removido: {path}")
 
-def remove_example_name(path):
-    """Renomeia arquivos e pastas removendo sufixos '.EXAMPLE' ou '_EXAMPLE'."""
-    if os.path.exists(path):
-        for dirpath, dirnames, filenames in os.walk(path, topdown=False):
-            for filename in filenames:
-                new_name = filename.replace(".EXAMPLE", "").replace("_EXAMPLE", "")
-                if filename != new_name:
-                    os.rename(os.path.join(dirpath, filename), os.path.join(dirpath, new_name))
-            for dirname in dirnames:
-                new_name = dirname.replace(".EXAMPLE", "").replace("_EXAMPLE", "")
-                if dirname != new_name:
-                    os.rename(os.path.join(dirpath, dirname), os.path.join(dirpath, new_name))
-
-# -----------------------------------
-# Funções de Diretórios e Validações
-# -----------------------------------
-
-def check_if_directory_older_than_7_days(directory):
-    """Verifica se a pasta foi modificada há mais de 7 dias."""
+def rename_example_files(directory):
+    """Renomeia arquivos/pastas removendo '.EXAMPLE' e '_EXAMPLE'."""
     if os.path.exists(directory):
-        last_modified_time = os.path.getmtime(directory)
-        return (time.time() - last_modified_time) / (60 * 60 * 24) > 7
-    return False
+        for dirpath, dirnames, filenames in os.walk(directory, topdown=False):
+            for name in filenames + dirnames:
+                new_name = name.replace(".EXAMPLE", "").replace("_EXAMPLE", "")
+                if name != new_name:
+                    os.rename(os.path.join(dirpath, name), os.path.join(dirpath, new_name))
+
+# -----------------------------------
+# Funções de Validação
+# -----------------------------------
+
+def is_directory_older_than_7_days(directory):
+    """Verifica se uma pasta foi modificada há mais de 7 dias."""
+    return os.path.exists(directory) and (time.time() - os.path.getmtime(directory)) / (60 * 60 * 24) > 7
 
 def should_update_directories():
-    """Verifica se é necessário atualizar os diretórios, com base na data ou existência."""
-    for directory in DIRECTORIES_TO_CHECK:
-        if not os.path.exists(directory) or check_if_directory_older_than_7_days(directory):
-            return True
-    return False
+    """Verifica se as pastas precisam ser atualizadas."""
+    return any(not os.path.exists(d) or is_directory_older_than_7_days(d) for d in DIRECTORIES_TO_CHECK)
 
 # -----------------------------------
-# Funções de Entrada de Dados
+# Funções de Login
 # -----------------------------------
-
-def get_appid():
-    """Solicita e valida o appid do usuário."""
-    while True:
-        appid = input("Por favor, insira o 'appid': ")
-        if appid.isdigit():
-            return appid
-        else:
-            print("Por favor, insira um appid válido (apenas números).")
 
 def save_login_info():
-    """Solicita nome de usuário e senha e salva em my_login.txt."""
+    """Gerencia login, evitando solicitações desnecessárias."""
+    if os.path.exists(LOGIN_FILE) and os.path.exists(GEN_EMU_LOGIN_FILE):
+        if filecmp.cmp(LOGIN_FILE, GEN_EMU_LOGIN_FILE, shallow=False):
+            print("[✔] Login já configurado. Nenhuma ação necessária.")
+            return
+
     print("\n--- Login ---")
     username = input("Digite seu nome de usuário: ")
-    password = getpass.getpass("Digite sua senha: ")  # Oculta a entrada da senha
+    password = getpass.getpass("Digite sua senha: ")
+
+    with open(LOGIN_FILE, "w") as file:
+        file.write(f"{username}\n{password}\n")
 
     os.makedirs("generate_emu_config", exist_ok=True)
-    with open(LOGIN_FILE, "w") as file:
-        file.write(f"{username}\n")
-        file.write(f"{password}\n")
-    print(f"Login salvo em: {LOGIN_FILE}")
+    shutil.copy(LOGIN_FILE, GEN_EMU_LOGIN_FILE)
+    print("[✔] Login salvo e copiado para generate_emu_config.")
 
 # -----------------------------------
 # Funções de Mesclagem e Movimentação de Pastas
 # -----------------------------------
 
-def merge_folders(src_folder, dest_folder):
-    """Mescla os arquivos de uma pasta na outra, substituindo os arquivos existentes."""
-    if os.path.exists(src_folder):
-        for item in os.listdir(src_folder):
-            s = os.path.join(src_folder, item)
-            d = os.path.join(dest_folder, item)
-            if os.path.isdir(s):
-                if not os.path.exists(d):
-                    shutil.copytree(s, d)
-                else:
-                    merge_folders(s, d)  # Mescla recursivamente
-            else:
-                shutil.copy2(s, d)  # Substitui o arquivo existente
-                print(f"Arquivo '{s}' substituído por '{d}'")
+def merge_folders(src, dest):
+    """Mescla arquivos de uma pasta na outra, substituindo arquivos existentes."""
+    if os.path.exists(src):
+        for item in os.listdir(src):
+            s, d = os.path.join(src, item), os.path.join(dest, item)
+            shutil.copytree(s, d) if os.path.isdir(s) else shutil.copy2(s, d)
     else:
-        print(f"A pasta de origem '{src_folder}' não foi encontrada!")
+        print(f"[✘] Pasta de origem '{src}' não encontrada!")
 
 def move_steam_settings(appid):
-    """Move a pasta steam_settings de 'output' para 'Emu', substituindo os arquivos existentes."""
-    output_folder = os.path.join("output", appid, "steam_settings")
-    target_folder = os.path.join(EMU_FOLDER, "steam_settings")
+    """Move 'steam_settings' de output para Emu."""
+    output_folder, target_folder = os.path.join("output", appid, "steam_settings"), os.path.join(EMU_FOLDER, "steam_settings")
 
     if os.path.exists(output_folder):
-        if os.path.exists(target_folder):
-            print(f"Mesclando pasta 'steam_settings' de '{output_folder}' para '{target_folder}'...")
-            merge_folders(output_folder, target_folder)
-        else:
-            shutil.move(output_folder, target_folder)
-            print(f"Pasta 'steam_settings' movida para '{EMU_FOLDER}'.")
+        os.makedirs(target_folder, exist_ok=True)
+        merge_folders(output_folder, target_folder)
+        delete_file_or_directory(output_folder)
+        print(f"[✔] 'steam_settings' movido para '{EMU_FOLDER}'.")
     else:
-        print("Pasta 'steam_settings' não encontrada dentro de 'output'.")
+        print("[✘] 'steam_settings' não encontrado em output.")
 
 def execute_generate_emu_config(appid):
-    """Executa o 'generate_emu_config.exe' com o appid fornecido."""
-    generate_emu_config_path = os.path.join("generate_emu_config", "generate_emu_config.exe")
-    if os.path.exists(generate_emu_config_path):
-        subprocess.run([generate_emu_config_path, appid], check=True)
-        print(f"Comando executado com o appid: {appid}")
+    """Executa 'generate_emu_config.exe' com o appid."""
+    exe_path = os.path.join("generate_emu_config", "generate_emu_config.exe")
+    if os.path.exists(exe_path):
+        subprocess.run([exe_path, appid], check=True)
     else:
-        print(f"Erro: {generate_emu_config_path} não encontrado.")
+        print(f"[✘] '{exe_path}' não encontrado.")
 
 # -----------------------------------
 # Função Principal
 # -----------------------------------
 
 def main():
-    # Se a pasta "Emu" não existe, extraímos "assets.7z"
     if not os.path.exists(EMU_FOLDER):
-        print(f"A pasta '{EMU_FOLDER}' não existe. Extraindo '{ASSETS_FILE}'...")
         if os.path.exists(ASSETS_FILE):
             extract_file(ASSETS_FILE)
             delete_file_or_directory(SEVEN_ZIP_EXE)
         else:
-            print(f"Erro: '{ASSETS_FILE}' não encontrado na pasta do script!")
+            print(f"[✘] '{ASSETS_FILE}' não encontrado!")
             return
 
-    # Verifica se é necessário atualizar diretórios
     if should_update_directories():
-        print("Atualizando pastas. Procedendo com download e extração.")
+        print("Atualizando pastas...")
 
-        # Excluir pastas antigas
         for directory in DIRECTORIES_TO_CHECK:
             delete_file_or_directory(directory)
 
-        # Baixar e extrair arquivos principais
         for file_name in FILE_NAMES:
             download_file(BASE_URL + file_name, file_name)
             extract_file(file_name)
 
-        # Limpeza após uso
         delete_file_or_directory(SEVEN_ZIP_EXE)
         for directory in DIRECTORIES_TO_REMOVE:
             delete_file_or_directory(directory)
 
-        # Remover ".EXAMPLE" e "_EXAMPLE"
         for directory in DIRECTORIES_TO_CHECK:
-            remove_example_name(directory)
-    else:
-        print("As pastas estão atualizadas. Nenhuma ação necessária.")
+            rename_example_files(directory)
 
-    # Solicita e salva o login
     save_login_info()
-
-    # Solicita o appid e executa o comando
-    appid = get_appid()
+    appid = input("Por favor, insira o 'appid': ")
     execute_generate_emu_config(appid)
-
-    # Mescla ou move a pasta 'steam_settings'
     move_steam_settings(appid)
-
-    # Remove a pasta 'output'
     delete_file_or_directory("output")
 
-    # Solicita ao usuário para selecionar um arquivo
     root = tk.Tk()
-    root.withdraw()  # Oculta a janela principal
+    root.withdraw()
+    file_path = filedialog.askopenfilename(title="Selecione steam_api.dll ou steam_api64.dll", filetypes=[("DLL files", "*.dll")])
 
-    file_path = filedialog.askopenfilename(
-        title="Selecione o ficheiro steam_api.dll ou steam_api64.dll",
-        filetypes=[("DLL files", "*.dll")],
-        initialdir="."
-    )
-
-    if file_path and (file_path.endswith("steam_api.dll") or file_path.endswith("steam_api64.dll")):
-        destination_path = shutil.copy(file_path, "Emu")
-        base, ext = os.path.splitext(destination_path)
-        new_file_path = base + "_o" + ext
-        os.rename(destination_path, new_file_path)
-        print(f"Ficheiro {file_path} copiado para a pasta Emu como {new_file_path}.")
-    else:
-        print("Nenhum ficheiro válido foi selecionado.")
+    if file_path and file_path.endswith((".dll")):
+        dest = shutil.copy(file_path, "Emu")
+        os.rename(dest, dest.replace(".dll", "_o.dll"))
+        print(f"[✔] {file_path} copiado para Emu.")
 
     input("Pressione Enter para sair...")
 
