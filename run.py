@@ -108,12 +108,21 @@ def save_login_info():
 # Funções de Mesclagem e Movimentação de Pastas
 # -----------------------------------
 
+def copy_file(src, dest):
+    """Copia um arquivo, substituindo se já existir."""
+    shutil.copy2(src, dest)
+    print(f"[✔] Copiado: {src} -> {dest}")
+
 def merge_folders(src, dest):
     """Mescla arquivos de uma pasta na outra, substituindo arquivos existentes."""
     if os.path.exists(src):
+        os.makedirs(dest, exist_ok=True)
         for item in os.listdir(src):
             s, d = os.path.join(src, item), os.path.join(dest, item)
-            shutil.copytree(s, d) if os.path.isdir(s) else shutil.copy2(s, d)
+            if os.path.isdir(s):
+                shutil.copytree(s, d, dirs_exist_ok=True)
+            else:
+                copy_file(s, d)
     else:
         print(f"[✘] Pasta de origem '{src}' não encontrada!")
 
@@ -124,7 +133,6 @@ def move_steam_settings(appid):
     if os.path.exists(output_folder):
         os.makedirs(target_folder, exist_ok=True)
         merge_folders(output_folder, target_folder)
-        delete_file_or_directory(output_folder)
         print(f"[✔] 'steam_settings' movido para '{EMU_FOLDER}'.")
     else:
         print("[✘] 'steam_settings' não encontrado em output.")
@@ -136,6 +144,37 @@ def execute_generate_emu_config(appid):
         subprocess.run([exe_path, appid], check=True)
     else:
         print(f"[✘] '{exe_path}' não encontrado.")
+
+# -----------------------------------
+# Processamento de DLLs
+# -----------------------------------
+
+def execute_command(command):
+    """Executa um comando no terminal."""
+    try:
+        subprocess.run(command, check=True)
+        print(f"[✔] Comando executado: {' '.join(command)}")
+    except subprocess.CalledProcessError:
+        print(f"[✘] Erro ao executar: {' '.join(command)}")
+
+def process_dll_file(file_path):
+    """Copia o arquivo DLL, executa o comando correspondente e depois renomeia."""
+    if not file_path or not file_path.endswith(".dll"):
+        print("[✘] Nenhum arquivo válido foi selecionado.")
+        return
+
+    file_name = os.path.basename(file_path)
+    dest_path = os.path.join(EMU_FOLDER, file_name)
+    copy_file(file_path, dest_path)
+
+    if file_name == "steam_api.dll":
+        subprocess.run(['release\\tools\\generate_interfaces\\generate_interfaces_x32.exe', dest_path], check=True)
+    elif file_name == "steam_api64.dll":
+        subprocess.run(['release\\tools\\generate_interfaces\\generate_interfaces_x64.exe', dest_path], check=True)
+
+    new_file_path = dest_path.replace(".dll", "_o.dll")
+    os.rename(dest_path, new_file_path)
+    print(f"[✔] Arquivo renomeado para '{new_file_path}'.")
 
 # -----------------------------------
 # Função Principal
@@ -176,11 +215,7 @@ def main():
     root = tk.Tk()
     root.withdraw()
     file_path = filedialog.askopenfilename(title="Selecione steam_api.dll ou steam_api64.dll", filetypes=[("DLL files", "*.dll")])
-
-    if file_path and file_path.endswith((".dll")):
-        dest = shutil.copy(file_path, "Emu")
-        os.rename(dest, dest.replace(".dll", "_o.dll"))
-        print(f"[✔] {file_path} copiado para Emu.")
+    process_dll_file(file_path)
 
     input("Pressione Enter para sair...")
 
