@@ -89,6 +89,11 @@ def should_update_directories():
 def save_login_info():
     """Gerencia login, evitando solicitações desnecessárias."""
     if os.path.exists(LOGIN_FILE) and os.path.exists(GEN_EMU_LOGIN_FILE):
+        os.makedirs("generate_emu_config", exist_ok=True)
+        shutil.copy(LOGIN_FILE, GEN_EMU_LOGIN_FILE)
+        print("[✔] Login copiado para generate_emu_config.")
+        return
+    elif os.path.exists(LOGIN_FILE):
         if filecmp.cmp(LOGIN_FILE, GEN_EMU_LOGIN_FILE, shallow=False):
             print("[✔] Login já configurado. Nenhuma ação necessária.")
             return
