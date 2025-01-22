@@ -20,6 +20,10 @@ DIRECTORIES_TO_REMOVE = ["parse_controller_vdf", "parse_achievements_schema"]
 DIRECTORIES_TO_CHECK = ["generate_emu_config", "release"]
 EMU_FOLDER = "Emu"
 ASSETS_FILE = "assets.7z"
+STEAM_SETTINGS_FOLDER = os.path.join(EMU_FOLDER, "steam_settings")
+STEAM_INTERFACES_FILE = "steam_interfaces.txt"
+STEAM_API32_PATH = os.path.join("release", "experimental", "x32", "steam_api.dll")
+STEAM_API64_PATH = os.path.join("release", "experimental", "x64", "steam_api64.dll")
 
 # Caminhos de login
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -41,12 +45,14 @@ def download_file(url, file_name):
     else:
         print(f"[✘] Falha ao baixar {file_name} (Código {response.status_code})")
 
-def extract_file(file_name):
-    """Extrai um arquivo compactado usando 7zr.exe."""
+def ensure_seven_zip():
+    """Baixa o 7zr.exe se não existir."""
     if not os.path.exists(SEVEN_ZIP_EXE):
         print(f"Baixando '{SEVEN_ZIP_EXE}'...")
         download_file(SEVEN_ZIP_URL, SEVEN_ZIP_EXE)
 
+def extract_file(file_name):
+    """Extrai um arquivo compactado usando 7zr.exe."""
     if os.path.exists(file_name):
         subprocess.run([SEVEN_ZIP_EXE, "x", file_name, "-o."], check=True)
         print(f"[✔] Extração concluída: {file_name}")
@@ -162,8 +168,13 @@ def execute_command(command):
     except subprocess.CalledProcessError:
         print(f"[✘] Erro ao executar: {' '.join(command)}")
 
-def process_dll_file(file_path):
+def process_dll_files():
     """Copia o arquivo DLL, executa o comando correspondente e depois renomeia."""
+    root = tk.Tk()
+    root.withdraw()
+    print("Selecione steam_api.dll ou steam_api64.dll.")
+    file_path = filedialog.askopenfilename(title="Selecione steam_api.dll ou steam_api64.dll", filetypes=[("DLL files", "*.dll")])
+    
     if not file_path or not file_path.endswith(".dll"):
         print("[✘] Nenhum arquivo válido foi selecionado.")
         return
@@ -181,21 +192,38 @@ def process_dll_file(file_path):
     os.rename(dest_path, new_file_path)
     print(f"[✔] Arquivo renomeado para '{new_file_path}'.")
 
+    shutil.move(STEAM_INTERFACES_FILE, os.path.join(STEAM_SETTINGS_FOLDER, STEAM_INTERFACES_FILE))
+    print(f"[✔] '{STEAM_INTERFACES_FILE}' movido para '{STEAM_SETTINGS_FOLDER}'.")
+
+    if file_name == "steam_api.dll":
+        shutil.copy2(STEAM_API32_PATH, os.path.join(EMU_FOLDER, "steam_api.dll"))
+        print(f"[✔] 'steam_api.dll' copiado para '{EMU_FOLDER}'.")
+    elif file_name == "steam_api64.dll":
+        shutil.copy2(STEAM_API64_PATH, os.path.join(EMU_FOLDER, "steam_api64.dll"))
+        print(f"[✔] 'steam_api64.dll' copiado para '{EMU_FOLDER}'.")
+
 # -----------------------------------
 # Função Principal
 # -----------------------------------
 
 def main():
-    if not os.path.exists(EMU_FOLDER):
-        if os.path.exists(ASSETS_FILE):
-            extract_file(ASSETS_FILE)
-            delete_file_or_directory(SEVEN_ZIP_EXE)
-        else:
-            print(f"[✘] '{ASSETS_FILE}' não encontrado!")
-            return
+    """Fluxo principal do script."""
+    ensure_seven_zip()
+
+    if os.path.exists(EMU_FOLDER):
+        delete_file_or_directory(EMU_FOLDER)
+    
+    if not os.path.exists(ASSETS_FILE):
+        print(f"[✘] '{ASSETS_FILE}' não encontrado!")
+        return
+    
+    extract_file(ASSETS_FILE)
 
     if should_update_directories():
-        print("Atualizando pastas...")
+        print("Atualizando pastas e ficheiro...")
+
+        delete_file_or_directory(SEVEN_ZIP_EXE)
+        ensure_seven_zip()
 
         for directory in DIRECTORIES_TO_CHECK:
             delete_file_or_directory(directory)
@@ -204,7 +232,6 @@ def main():
             download_file(BASE_URL + file_name, file_name)
             extract_file(file_name)
 
-        delete_file_or_directory(SEVEN_ZIP_EXE)
         for directory in DIRECTORIES_TO_REMOVE:
             delete_file_or_directory(directory)
 
@@ -214,13 +241,10 @@ def main():
     save_login_info()
     appid = input("Por favor, insira o 'appid': ")
     execute_generate_emu_config(appid)
+
     move_steam_settings(appid)
     delete_file_or_directory("output")
-
-    root = tk.Tk()
-    root.withdraw()
-    file_path = filedialog.askopenfilename(title="Selecione steam_api.dll ou steam_api64.dll", filetypes=[("DLL files", "*.dll")])
-    process_dll_file(file_path)
+    process_dll_files()
 
     input("Pressione Enter para sair...")
 
