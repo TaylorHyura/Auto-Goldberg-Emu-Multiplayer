@@ -200,7 +200,7 @@ def process_dll_files():
     print(f"[✔] '{file_name}' copiado para '{EMU_FOLDER}'.")
 
 # -----------------------------------
-# Processamento de DLLs
+# Processamento de INIs
 # -----------------------------------
 
 def process_overlay_config():
