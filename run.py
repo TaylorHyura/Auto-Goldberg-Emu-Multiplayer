@@ -1,34 +1,37 @@
-import subprocess
-import os
+import subprocess # Execução de comandos
+import os # Manipulação de arquivos
 import shutil
-import time
-import requests
-import getpass
-import filecmp  # Comparação de arquivos
-import tkinter as tk
-from tkinter import filedialog
+import time # Manipulação de tempo
+import requests # Requisições HTTP
+import getpass # Ocultar senha
+import filecmp # Comparação de arquivos
+import tkinter as tk # Interface gráfica
+from tkinter import filedialog 
 
 # -----------------------------------
 # Configurações Globais
 # -----------------------------------
-BASE_URL = "https://github.com/Detanup01/gbe_fork/releases/latest/download/"
+GBE_URL = "https://github.com/Detanup01/gbe_fork/releases/latest/download/"
 SEVEN_ZIP_URL = "https://github.com/ip7z/7zip/releases/latest/download/7zr.exe"
 
 SEVEN_ZIP_EXE = "7zr.exe"
-FILE_NAMES = ["emu-win-release.7z", "generate_emu_config-win.7z"]
-DIRECTORIES_TO_REMOVE = ["parse_controller_vdf", "parse_achievements_schema"]
-DIRECTORIES_TO_CHECK = ["generate_emu_config", "release"]
-EMU_FOLDER = "Emu"
 ASSETS_FILE = "assets.7z"
-STEAM_SETTINGS_FOLDER = os.path.join(EMU_FOLDER, "steam_settings")
+GBE_FILES = ["emu-win-release.7z", "generate_emu_config-win.7z"]
+
+FOLDES_TO_REMOVE = ["parse_controller_vdf", "parse_achievements_schema"]
+FOLDES_TO_CHECK = ["generate_emu_config", "release"]
+EMU_FOLDER = "Emu"
+EMU_STEAM_SETTINGS = os.path.join(EMU_FOLDER, "steam_settings")
+
+STEAM_API32_FILE = "release\\experimental\\x32\\steam_api.dll"
+STEAM_API64_FILE = "release\\experimental\\x64\\steam_api64.dll"
+GBE_STEAM_SETTINGS = "release\\steam_settings"
 STEAM_INTERFACES_FILE = "steam_interfaces.txt"
-STEAM_API32_PATH = os.path.join("release", "experimental", "x32", "steam_api.dll")
-STEAM_API64_PATH = os.path.join("release", "experimental", "x64", "steam_api64.dll")
+CONFIGS_OVERLAY_FILE = "configs.overlay.ini"
 
 # Caminhos de login
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-LOGIN_FILE = os.path.join(SCRIPT_DIR, "my_login.txt")
-GEN_EMU_LOGIN_FILE = os.path.join("generate_emu_config", "my_login.txt")
+LOGIN_FILE = "my_login.txt"
+GEN_EMU_LOGIN_FILE = os.path.join("generate_emu_config", LOGIN_FILE)
 
 # -----------------------------------
 # Funções Auxiliares de Arquivo e Diretório
@@ -86,7 +89,7 @@ def is_directory_older_than_7_days(directory):
 
 def should_update_directories():
     """Verifica se as pastas precisam ser atualizadas."""
-    return any(not os.path.exists(d) or is_directory_older_than_7_days(d) for d in DIRECTORIES_TO_CHECK)
+    return any(not os.path.exists(d) or is_directory_older_than_7_days(d) for d in FOLDES_TO_CHECK)
 
 # -----------------------------------
 # Funções de Login
@@ -94,14 +97,13 @@ def should_update_directories():
 
 def save_login_info():
     """Gerencia login, evitando solicitações desnecessárias."""
-    if os.path.exists(LOGIN_FILE) and os.path.exists(GEN_EMU_LOGIN_FILE):
-        os.makedirs("generate_emu_config", exist_ok=True)
-        shutil.copy(LOGIN_FILE, GEN_EMU_LOGIN_FILE)
-        print("[✔] Login copiado para generate_emu_config.")
-        return
-    elif os.path.exists(LOGIN_FILE):
+    if os.path.exists(LOGIN_FILE):
         if filecmp.cmp(LOGIN_FILE, GEN_EMU_LOGIN_FILE, shallow=False):
             print("[✔] Login já configurado. Nenhuma ação necessária.")
+            return
+        else:
+            shutil.copy(LOGIN_FILE, GEN_EMU_LOGIN_FILE)
+            print("[✔] Login copiado para generate_emu_config.")
             return
 
     print("\n--- Login ---")
@@ -111,7 +113,6 @@ def save_login_info():
     with open(LOGIN_FILE, "w") as file:
         file.write(f"{username}\n{password}\n")
 
-    os.makedirs("generate_emu_config", exist_ok=True)
     shutil.copy(LOGIN_FILE, GEN_EMU_LOGIN_FILE)
     print("[✔] Login salvo e copiado para generate_emu_config.")
 
@@ -139,7 +140,7 @@ def merge_folders(src, dest):
 
 def move_steam_settings(appid):
     """Move 'steam_settings' de output para Emu."""
-    output_folder, target_folder = os.path.join("output", appid, "steam_settings"), os.path.join(EMU_FOLDER, "steam_settings")
+    output_folder, target_folder = os.path.join("output", appid, "steam_settings"), EMU_STEAM_SETTINGS
 
     if os.path.exists(output_folder):
         os.makedirs(target_folder, exist_ok=True)
@@ -192,15 +193,33 @@ def process_dll_files():
     os.rename(dest_path, new_file_path)
     print(f"[✔] Arquivo renomeado para '{new_file_path}'.")
 
-    shutil.move(STEAM_INTERFACES_FILE, os.path.join(STEAM_SETTINGS_FOLDER, STEAM_INTERFACES_FILE))
-    print(f"[✔] '{STEAM_INTERFACES_FILE}' movido para '{STEAM_SETTINGS_FOLDER}'.")
+    shutil.move(STEAM_INTERFACES_FILE, os.path.join(EMU_STEAM_SETTINGS, STEAM_INTERFACES_FILE))
+    print(f"[✔] '{STEAM_INTERFACES_FILE}' movido para '{EMU_STEAM_SETTINGS}'.")
 
-    if file_name == "steam_api.dll":
-        shutil.copy2(STEAM_API32_PATH, os.path.join(EMU_FOLDER, "steam_api.dll"))
-        print(f"[✔] 'steam_api.dll' copiado para '{EMU_FOLDER}'.")
-    elif file_name == "steam_api64.dll":
-        shutil.copy2(STEAM_API64_PATH, os.path.join(EMU_FOLDER, "steam_api64.dll"))
-        print(f"[✔] 'steam_api64.dll' copiado para '{EMU_FOLDER}'.")
+    shutil.copy2(STEAM_API64_FILE if "64" in file_name else STEAM_API32_FILE, os.path.join(EMU_FOLDER, file_name))
+    print(f"[✔] '{file_name}' copiado para '{EMU_FOLDER}'.")
+
+# -----------------------------------
+# Processamento de DLLs
+# -----------------------------------
+
+def process_overlay_config():
+    """Copia o arquivo INI e depois faz a alteração de um campo."""
+    gbe_configs_overlay = os.path.join(GBE_STEAM_SETTINGS, CONFIGS_OVERLAY_FILE)
+    emu_configs_overlay = os.path.join(EMU_STEAM_SETTINGS, CONFIGS_OVERLAY_FILE)
+
+    shutil.copy2(gbe_configs_overlay, emu_configs_overlay)
+    print(f"[✔] '{gbe_configs_overlay}' copiado para '{emu_configs_overlay}'.")
+
+    with open(emu_configs_overlay, "r", encoding="utf-8") as file:
+        lines = file.readlines()
+
+    with open(emu_configs_overlay, "w", encoding="utf-8") as file:
+        for line in lines:
+            if line.strip().startswith("enable_experimental_overlay="):
+                file.write("enable_experimental_overlay=1\n")
+            else:
+                file.write(line)
 
 # -----------------------------------
 # Função Principal
@@ -225,17 +244,17 @@ def main():
         delete_file_or_directory(SEVEN_ZIP_EXE)
         ensure_seven_zip()
 
-        for directory in DIRECTORIES_TO_CHECK:
+        for directory in FOLDES_TO_CHECK:
             delete_file_or_directory(directory)
 
-        for file_name in FILE_NAMES:
-            download_file(BASE_URL + file_name, file_name)
-            extract_file(file_name)
+        for file in GBE_FILES:
+            download_file(GBE_URL + file, file)
+            extract_file(file)
 
-        for directory in DIRECTORIES_TO_REMOVE:
+        for directory in FOLDES_TO_REMOVE:
             delete_file_or_directory(directory)
 
-        for directory in DIRECTORIES_TO_CHECK:
+        for directory in FOLDES_TO_CHECK:
             rename_example_files(directory)
 
     save_login_info()
@@ -245,6 +264,7 @@ def main():
     move_steam_settings(appid)
     delete_file_or_directory("output")
     process_dll_files()
+    process_overlay_config()
 
     input("Pressione Enter para sair...")
 
