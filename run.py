@@ -28,6 +28,7 @@ STEAM_API64_FILE = "release\\experimental\\x64\\steam_api64.dll"
 GBE_STEAM_SETTINGS = "release\\steam_settings"
 STEAM_INTERFACES_FILE = "steam_interfaces.txt"
 CONFIGS_OVERLAY_FILE = "configs.overlay.ini"
+CUSTOM_BROADCASTS_FILE = "custom_broadcasts.txt"
 
 # Caminhos de login
 LOGIN_FILE = "my_login.txt"
@@ -38,7 +39,8 @@ GEN_EMU_LOGIN_FILE = os.path.join("generate_emu_config", LOGIN_FILE)
 # -----------------------------------
 
 def download_file(url, file_name):
-    """Baixa um arquivo de uma URL."""
+    """Baixa arquivos atraves uma URL."""
+    print(f"Baixando {file_name}...")
     response = requests.get(url, stream=True)
     if response.status_code == 200:
         with open(file_name, "wb") as file:
@@ -46,27 +48,28 @@ def download_file(url, file_name):
                 file.write(chunk)
         print(f"[✔] Download concluído: {file_name}")
     else:
-        print(f"[✘] Falha ao baixar {file_name} (Código {response.status_code})")
+        print(f"[✘] Falha ao baixar: {file_name} (Código {response.status_code})")
 
 def ensure_seven_zip():
     """Baixa o 7zr.exe se não existir."""
     if not os.path.exists(SEVEN_ZIP_EXE):
-        print(f"Baixando '{SEVEN_ZIP_EXE}'...")
         download_file(SEVEN_ZIP_URL, SEVEN_ZIP_EXE)
 
 def extract_file(file_name):
-    """Extrai um arquivo compactado usando 7zr.exe."""
+    """Extrai arquivos usando 7zr.exe."""
+    print(f"Extraindo {file_name}...")
     if os.path.exists(file_name):
         subprocess.run([SEVEN_ZIP_EXE, "x", file_name, "-o."], check=True)
         print(f"[✔] Extração concluída: {file_name}")
         if file_name != ASSETS_FILE:
-            os.remove(file_name)
+            delete_file_or_directory(file_name)
     else:
-        print(f"[✘] Erro: '{file_name}' não encontrado!")
+        print(f"[✘] Falha ao extrair: {file_name} não encontrado!")
 
 def delete_file_or_directory(path):
     """Remove arquivos ou diretórios."""
     if os.path.exists(path):
+        print(f"Removendo {path}...")
         shutil.rmtree(path) if os.path.isdir(path) else os.remove(path)
         print(f"[✔] Removido: {path}")
 
@@ -105,9 +108,9 @@ def save_login_info():
             shutil.copy(LOGIN_FILE, GEN_EMU_LOGIN_FILE)
             print("[✔] Login copiado para generate_emu_config.")
             return
-
-    print("\n--- Login ---")
-    username = input("Digite seu nome de usuário: ")
+        
+    print("\n--- Login Steam---")
+    username = input("Digite seu nome: ")
     password = getpass.getpass("Digite sua senha: ")
 
     with open(LOGIN_FILE, "w") as file:
@@ -136,41 +139,28 @@ def merge_folders(src, dest):
             else:
                 copy_file(s, d)
     else:
-        print(f"[✘] Pasta de origem '{src}' não encontrada!")
+        print(f"[✘] Pasta {src} não encontrada!")
 
 def move_steam_settings(appid):
     """Move 'steam_settings' de output para Emu."""
     output_folder, target_folder = os.path.join("output", appid, "steam_settings"), EMU_STEAM_SETTINGS
 
-    if os.path.exists(output_folder):
-        os.makedirs(target_folder, exist_ok=True)
-        merge_folders(output_folder, target_folder)
-        print(f"[✔] 'steam_settings' movido para '{EMU_FOLDER}'.")
-    else:
-        print("[✘] 'steam_settings' não encontrado em output.")
+    merge_folders(output_folder, target_folder)
 
 def execute_generate_emu_config(appid):
     """Executa 'generate_emu_config.exe' com o appid."""
-    exe_path = os.path.join("generate_emu_config", "generate_emu_config.exe")
+    exe_path = "generate_emu_config\\generate_emu_config.exe"
     if os.path.exists(exe_path):
         subprocess.run([exe_path, appid], check=True)
     else:
-        print(f"[✘] '{exe_path}' não encontrado.")
+        print(f"[✘] {exe_path} não encontrado.")
 
 # -----------------------------------
-# Processamento de DLLs
+# Processamento de fisheiros
 # -----------------------------------
 
-def execute_command(command):
-    """Executa um comando no terminal."""
-    try:
-        subprocess.run(command, check=True)
-        print(f"[✔] Comando executado: {' '.join(command)}")
-    except subprocess.CalledProcessError:
-        print(f"[✘] Erro ao executar: {' '.join(command)}")
-
-def process_dll_files():
-    """Copia o arquivo DLL, executa o comando correspondente e depois renomeia."""
+def process_steamapi_files():
+    """Copia o arquivo 'steam_api.dll' do jogo, executa o comando para obter 'steam_interfaces.txt', faz backup alterando o nome e copia o 'steam_api.dll' do emu."""
     root = tk.Tk()
     root.withdraw()
     print("Selecione steam_api.dll ou steam_api64.dll.")
@@ -191,25 +181,21 @@ def process_dll_files():
 
     new_file_path = dest_path.replace(".dll", "_o.dll")
     os.rename(dest_path, new_file_path)
-    print(f"[✔] Arquivo renomeado para '{new_file_path}'.")
+    print(f"[✔] Renomeado: {dest_path} -> {new_file_path}")
 
-    shutil.move(STEAM_INTERFACES_FILE, os.path.join(EMU_STEAM_SETTINGS, STEAM_INTERFACES_FILE))
-    print(f"[✔] '{STEAM_INTERFACES_FILE}' movido para '{EMU_STEAM_SETTINGS}'.")
+    emu_steam_interfaces = os.path.join(EMU_STEAM_SETTINGS, STEAM_INTERFACES_FILE)
 
-    shutil.copy2(STEAM_API64_FILE if "64" in file_name else STEAM_API32_FILE, os.path.join(EMU_FOLDER, file_name))
-    print(f"[✔] '{file_name}' copiado para '{EMU_FOLDER}'.")
+    shutil.move(STEAM_INTERFACES_FILE, emu_steam_interfaces)
+    print(f"[✔] Movido: {STEAM_INTERFACES_FILE} -> {emu_steam_interfaces}")
 
-# -----------------------------------
-# Processamento de INIs
-# -----------------------------------
+    copy_file(STEAM_API64_FILE if "64" in file_name else STEAM_API32_FILE, os.path.join(EMU_FOLDER, file_name))
 
-def process_overlay_config():
-    """Copia o arquivo INI e depois faz a alteração de um campo."""
+def process_configs_overlay():
+    """Copia o arquivo 'configs.overlay.ini' e faz a alteração do campo 'enable_experimental_overlay'."""
     gbe_configs_overlay = os.path.join(GBE_STEAM_SETTINGS, CONFIGS_OVERLAY_FILE)
     emu_configs_overlay = os.path.join(EMU_STEAM_SETTINGS, CONFIGS_OVERLAY_FILE)
 
-    shutil.copy2(gbe_configs_overlay, emu_configs_overlay)
-    print(f"[✔] '{gbe_configs_overlay}' copiado para '{emu_configs_overlay}'.")
+    copy_file(gbe_configs_overlay, emu_configs_overlay)
 
     with open(emu_configs_overlay, "r", encoding="utf-8") as file:
         lines = file.readlines()
@@ -220,6 +206,24 @@ def process_overlay_config():
                 file.write("enable_experimental_overlay=1\n")
             else:
                 file.write(line)
+
+def process_custom_broadcasts():
+    """Copia o arquivo 'custom_broadcasts.txt'."""
+    gbe_custom_broadcasts = os.path.join(GBE_STEAM_SETTINGS, CUSTOM_BROADCASTS_FILE)
+    emu_custom_broadcasts = os.path.join(EMU_STEAM_SETTINGS, CUSTOM_BROADCASTS_FILE)
+
+    copy_file(gbe_custom_broadcasts, emu_custom_broadcasts)
+
+    try:
+        response = requests.get("https://api64.ipify.org?format=text", timeout=5)
+        response.raise_for_status()
+
+        ip_publico = response.text
+
+        with open(emu_custom_broadcasts, "w", encoding="utf-8") as f:
+            f.write(ip_publico)  
+    except requests.RequestException as e:
+        print(f"[✘] Falha ao obter IP público: {e}")
 
 # -----------------------------------
 # Função Principal
@@ -233,7 +237,7 @@ def main():
         delete_file_or_directory(EMU_FOLDER)
     
     if not os.path.exists(ASSETS_FILE):
-        print(f"[✘] '{ASSETS_FILE}' não encontrado!")
+        print(f"[✘] {ASSETS_FILE} não encontrado!")
         return
     
     extract_file(ASSETS_FILE)
@@ -263,8 +267,9 @@ def main():
 
     move_steam_settings(appid)
     delete_file_or_directory("output")
-    process_dll_files()
-    process_overlay_config()
+    process_steamapi_files()
+    process_configs_overlay()
+    process_custom_broadcasts()
 
     input("Pressione Enter para sair...")
 
