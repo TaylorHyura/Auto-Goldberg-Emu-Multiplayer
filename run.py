@@ -61,8 +61,8 @@ def extract_file(file_name):
     if os.path.exists(file_name):
         subprocess.run([SEVEN_ZIP_EXE, "x", file_name, "-o."], check=True)
         print(f"[✔] Extração concluída: {file_name}")
-        if file_name != ASSETS_FILE:
-            delete_file_or_directory(file_name)
+        #if file_name != ASSETS_FILE:
+        #    delete_file_or_directory(file_name)
     else:
         print(f"[✘] Falha ao extrair: {file_name} não encontrado!")
 
