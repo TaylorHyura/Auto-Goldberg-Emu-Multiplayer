@@ -204,6 +204,8 @@ def process_configs_overlay():
         for line in lines:
             if line.strip().startswith("enable_experimental_overlay="):
                 file.write("enable_experimental_overlay=1\n")
+            elif line.strip().startswith("disable_achievement_progress="):
+                file.write("disable_achievement_progress=1\n")
             else:
                 file.write(line)
 
