@@ -27,6 +27,7 @@ STEAM_API32_FILE = "release\\experimental\\x32\\steam_api.dll"
 STEAM_API64_FILE = "release\\experimental\\x64\\steam_api64.dll"
 GBE_STEAM_SETTINGS = "release\\steam_settings"
 STEAM_INTERFACES_FILE = "steam_interfaces.txt"
+CONFIGS_MAIN_FILE = "configs.main.ini"
 CONFIGS_OVERLAY_FILE = "configs.overlay.ini"
 CUSTOM_BROADCASTS_FILE = "custom_broadcasts.txt"
 
@@ -190,8 +191,25 @@ def process_steamapi_files():
 
     copy_file(STEAM_API64_FILE if "64" in file_name else STEAM_API32_FILE, os.path.join(EMU_FOLDER, file_name))
 
+def process_configs_main():
+    """Copia o arquivo 'configs.main.ini' e faz a alteração do campo 'enable_account_avatar'."""
+    gbe_configs_main = os.path.join(GBE_STEAM_SETTINGS, CONFIGS_MAIN_FILE)
+    emu_configs_main = os.path.join(EMU_STEAM_SETTINGS, CONFIGS_MAIN_FILE)
+
+    copy_file(gbe_configs_main, emu_configs_main)
+
+    with open(emu_configs_main, "r", encoding="utf-8") as file:
+        lines = file.readlines()
+
+    with open(emu_configs_main, "w", encoding="utf-8") as file:
+        for line in lines:
+            if line.strip().startswith("enable_account_avatar="):
+                file.write("enable_account_avatar=1\n")
+            else:
+                file.write(line)
+
 def process_configs_overlay():
-    """Copia o arquivo 'configs.overlay.ini' e faz a alteração do campo 'enable_experimental_overlay'."""
+    """Copia o arquivo 'configs.overlay.ini' e faz a alteração do campo 'enable_experimental_overlay' e 'disable_achievement_progress'."""
     gbe_configs_overlay = os.path.join(GBE_STEAM_SETTINGS, CONFIGS_OVERLAY_FILE)
     emu_configs_overlay = os.path.join(EMU_STEAM_SETTINGS, CONFIGS_OVERLAY_FILE)
 
@@ -270,6 +288,7 @@ def main():
     move_steam_settings(appid)
     delete_file_or_directory("output")
     process_steamapi_files()
+    process_configs_main()
     process_configs_overlay()
     process_custom_broadcasts()
 
