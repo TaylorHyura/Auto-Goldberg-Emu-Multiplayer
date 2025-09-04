@@ -273,6 +273,10 @@ def main():
 
         for file in GBE_FILES:
             download_file(GBE_URL + file, file)
+
+            if file == GBE_FILES[1] and not os.path.exists(file):
+                download_file("https://github.com/Detanup01/gbe_fork/releases/download/release-2025_01_09/" + file, file)
+
             extract_file(file)
 
         for directory in FOLDES_TO_REMOVE:
